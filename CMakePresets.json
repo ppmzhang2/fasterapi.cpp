@@ -1,0 +1,40 @@
+{
+    "version": 3,
+    "cmakeMinimumRequired": {
+        "major": 3,
+        "minor": 27,
+        "patch": 0
+    },
+    "configurePresets": [
+        {
+            "name": "ux",
+            "displayName": "Unix Makefiles",
+            "description": "Local development using Unix Makefiles",
+            "hidden": false,
+            "binaryDir": "${sourceDir}/build", // clangd LSP requires no presetName
+            "generator": "Unix Makefiles",
+            "cacheVariables": {
+                "CMAKE_BUILD_TYPE": "Debug",
+                "CMAKE_EXPORT_COMPILE_COMMANDS": true,
+                "CMAKE_CXX_STANDARD": "20",
+                "CMAKE_CXX_STANDARD_REQUIRED": true
+            }
+        }
+    ],
+    "buildPresets": [
+        {
+            "name": "ux-debug",
+            "displayName": "Unix Makefiles Debug",
+            "description": "Debug build using Unix Makefiles",
+            "configurePreset": "ux",
+            "configuration": "Debug"
+        },
+        {
+            "name": "ux-release",
+            "displayName": "Unix Makefiles Release",
+            "description": "Release build using Unix Makefiles",
+            "configurePreset": "ux",
+            "configuration": "Release"
+        }
+    ]
+}

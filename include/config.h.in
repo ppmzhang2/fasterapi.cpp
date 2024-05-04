@@ -1,0 +1,5 @@
+#pragma once
+
+#define VERSION_MAJOR @FasterAPI_VERSION_MAJOR@
+#define VERSION_MINOR @FasterAPI_VERSION_MINOR@
+#define VERSION_PATCH @FasterAPI_VERSION_PATCH@
