@@ -17,6 +17,3 @@ include/config.h
 
 # C/C++
 *.out
-
-# external libraries
-lib/
