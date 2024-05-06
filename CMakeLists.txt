@@ -27,6 +27,9 @@ set_target_properties(FasterAPI PROPERTIES
     RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin"
 )
 
+# Link the pthread library
+target_link_libraries(FasterAPI PRIVATE pthread)
+
 # Configure the file into the build directory
 configure_file(
     "${CMAKE_CURRENT_SOURCE_DIR}/include/config.h.in"

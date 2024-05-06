@@ -47,10 +47,11 @@ asio::awaitable<void> handle_client(asio::ip::tcp::socket socket) {
         // 3.2 Extract each line from the request stream and log to the console
         // until an empty line is encountered, which indicates the end of the
         // request header.
-        while (std::getline(request_stream, request_line) &&
-               !request_line.empty()) {
-            std::cout << request_line << std::endl;
-        }
+        // comment out to avoid printing
+        // while (std::getline(request_stream, request_line) &&
+        //        !request_line.empty()) {
+        //     std::cout << request_line << std::endl;
+        // }
 
         // 4. Create a simple HTTP response message with headers and a body.
         std::string response = "HTTP/1.1 200 OK\r\n"
