@@ -1,0 +1,3 @@
+# FasterAPI
+
+Toy backend service.
