@@ -1,5 +1,5 @@
-#include "asio.hpp"
 #include "server.hpp"
+#include "asio.hpp"
 #include "asio/experimental/awaitable_operators.hpp"
 #include <asio/co_spawn.hpp>
 #include <asio/detached.hpp>
@@ -23,54 +23,93 @@ std::string http_date() {
     return s;
 }
 
-// Coroutine to handle an individual client connection.
-// This function reads a complete HTTP request, logs it, and sends a basic
-// response. Parameter:
-//    socket - an `asio::ip::tcp::socket` object representing the connection to
-//    a client.
+std::string prepare_response(bool keep_alive) {
+    return "HTTP/1.1 200 OK\r\n"
+           "Date: " +
+           http_date() +
+           "\r\n"
+           "Content-Type: text/plain\r\n"
+           "Content-Length: 12\r\n" +
+           (keep_alive ? "Connection: keep-alive\r\n"
+                       : "Connection: close\r\n") +
+           "\r\n"
+           "Hello world!";
+}
+
+// Parse the request to check if the client wants to keep the connection alive.
+// for simplicity, we are ignoring the request details.
+bool flag_keep_alive(asio::streambuf &request) {
+    std::istream request_stream(&request);
+    std::string request_line;
+    while (std::getline(request_stream, request_line) &&
+           !request_line.empty() && request_line != "\r") {
+        if (request_line.find("Connection: keep-alive") != std::string::npos) {
+            return true;
+        }
+    }
+    return false;
+}
+
+// Coroutine to handle an individual client connection, now with Keep-Alive
+// support.
 asio::awaitable<void> handle_client(asio::ip::tcp::socket socket) {
     try {
-        // 1. Buffer to store the incoming data.
         asio::streambuf request;
 
-        // 2. Asynchronously read data from the socket
-        // Until the delimiter "\r\n\r\n" is found. This delimiter indicates the
-        // end of the HTTP request header.
-        co_await asio::async_read_until(socket, request, "\r\n\r\n",
-                                        asio::use_awaitable);
+        while (true) {
+            // 1. Asynchronously read until the HTTP header delimiter.
+            std::size_t bytes_transferred = co_await asio::async_read_until(
+                socket, request, "\r\n\r\n", asio::use_awaitable);
 
-        // 3. Log to the console request header
+            // if socket is closed by the client, break the loop
+            if (!socket.is_open()) {
+                break;
+            }
 
-        // 3.1 Stream to process the data in the buffer.
-        std::istream request_stream(&request);
-        std::string request_line;
+            // 2. Check if the client wants to keep the connection alive.
+            bool keep_alive = flag_keep_alive(request);
 
-        // 3.2 Extract each line from the request stream and log to the console
-        // until an empty line is encountered, which indicates the end of the
-        // request header.
-        // comment out to avoid printing
-        // while (std::getline(request_stream, request_line) &&
-        //        !request_line.empty()) {
-        //     std::cout << request_line << std::endl;
-        // }
+            // 3. Create the response message.
+            std::string response = prepare_response(keep_alive);
 
-        // 4. Create a simple HTTP response message with headers and a body.
-        std::string response = "HTTP/1.1 200 OK\r\n"
-                               "Date: " +
-                               http_date() +
-                               "\r\n"
-                               "Content-Type: text/plain\r\n"
-                               "Content-Length: 12\r\n"
-                               "\r\n"
-                               "Hello world!";
+            // 4. Asynchronously write the response back to the client.
+            asio::error_code ec_write;
+            co_await asio::async_write(
+                socket, asio::buffer(response),
+                asio::redirect_error(asio::use_awaitable, ec_write));
+            if (ec_write) {
+                if (ec_write == asio::error::connection_reset ||
+                    ec_write == asio::error::broken_pipe) {
+                    std::cerr
+                        << "Client closed connection: " << ec_write.message()
+                        << std::endl;
+                }
+                break;
+            }
 
-        // 5. Asynchronously send the response back to the client.
-        co_await asio::async_write(socket, asio::buffer(response),
-                                   asio::use_awaitable);
+            // 5. If the connection is not "keep-alive", close the socket.
+            if (!keep_alive) {
+                break; // Exit the loop to close the socket fully.
+            }
+
+            // Clear the buffer for the next request.
+            request.consume(bytes_transferred);
+        }
+
     } catch (std::exception &e) {
-        // If an exception occurs during processing, log it to the standard
-        // error stream.
-        std::cerr << "Exception: " << e.what() << std::endl;
+        // EOF is expected when the client closes the connection.
+        // TODO: verify
+        if (e.what() != std::string("End of file")) {
+            std::cerr << "Client Handling Exception: " << e.what() << std::endl;
+        }
+    }
+
+    // Attempt graceful closure of the connection
+    try {
+        socket.shutdown(asio::ip::tcp::socket::shutdown_send);
+        socket.close();
+    } catch (...) {
+        std::cerr << "Error closing socket." << std::endl;
     }
 }
 
@@ -155,7 +194,7 @@ namespace Server {
         } catch (std::exception &e) {
             // Exception handling: Any exceptions thrown within the server will
             // be caught here and logged to stderr.
-            std::cerr << "Exception: " << e.what() << std::endl;
+            std::cerr << "Server Exception: " << e.what() << std::endl;
         }
     }
 } // namespace Server
