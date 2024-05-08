@@ -1,6 +1,7 @@
 #include "server.hpp"
 
 int main() {
-    Server::start();
+    auto server = FasterAPI::Server(8080, 4);
+    server.Run();
     return 0;
 }

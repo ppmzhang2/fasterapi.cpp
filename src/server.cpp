@@ -11,9 +11,14 @@
 #include <string>
 #include <vector>
 
-#define N_THREADS 4
+using namespace FasterAPI;
 
-std::string http_date() {
+// Constructor: Initialize server parameters and work guard.
+Server::Server(uint16_t port, uint16_t n_thread)
+    : io_ctx_(), work_guard_(asio::make_work_guard(io_ctx_)), port_(port),
+      n_thread_(n_thread) {}
+
+std::string Server::http_date() {
     auto now =
         std::chrono::system_clock::to_time_t(std::chrono::system_clock::now());
     std::stringstream ss;
@@ -23,7 +28,7 @@ std::string http_date() {
     return s;
 }
 
-std::string prepare_response(bool keep_alive) {
+std::string Server::prepare_response(bool keep_alive) {
     return "HTTP/1.1 200 OK\r\n"
            "Date: " +
            http_date() +
@@ -38,7 +43,7 @@ std::string prepare_response(bool keep_alive) {
 
 // Parse the request to check if the client wants to keep the connection alive.
 // for simplicity, we are ignoring the request details.
-bool flag_keep_alive(asio::streambuf &request) {
+bool Server::flag_keep_alive(asio::streambuf &request) {
     std::istream request_stream(&request);
     std::string request_line;
     while (std::getline(request_stream, request_line) &&
@@ -52,7 +57,7 @@ bool flag_keep_alive(asio::streambuf &request) {
 
 // Coroutine to handle an individual client connection, now with Keep-Alive
 // support.
-asio::awaitable<void> handle_client(asio::ip::tcp::socket socket) {
+asio::awaitable<void> Server::handle_client(asio::ip::tcp::socket socket) {
     try {
         asio::streambuf request;
 
@@ -117,13 +122,13 @@ asio::awaitable<void> handle_client(asio::ip::tcp::socket socket) {
 // specified port. This function sets up an acceptor, listens on port 8080, and
 // spawns a new coroutine for each client connection using the handle_client
 // coroutine.
-asio::awaitable<void> listener(asio::io_context &io_context) {
+asio::awaitable<void> Server::listener() {
     // Get the executor from the current coroutine's context.
     auto executor = co_await asio::this_coro::executor;
 
     // Set up the TCP acceptor to listen on port 8080 using IPv4.
-    asio::ip::tcp::acceptor acceptor(executor, {asio::ip::tcp::v4(), 8080});
-    std::cout << "Server listening on port 8080..." << std::endl;
+    asio::ip::tcp::acceptor acceptor(executor, {asio::ip::tcp::v4(), port_});
+    std::cout << "Server listening on port " << port_ << std::endl;
 
     while (true) {
         // Asynchronously accept a new connection.
@@ -132,69 +137,44 @@ asio::awaitable<void> listener(asio::io_context &io_context) {
 
         // Spawn a new coroutine to handle the client using a strand for safe
         // concurrent access.
-        asio::co_spawn(asio::make_strand(io_context),
+        asio::co_spawn(asio::make_strand(io_ctx_),
                        handle_client(std::move(socket)), asio::detached);
     }
 }
 
-namespace Server {
-    void start() {
-        try {
-            // The io_context is the main object in ASIO that handles all I/O
-            // operations.
-            asio::io_context io_context;
+void Server::Run() {
+    try {
+        // Launch the listener coroutine. This function is responsible for
+        // accepting incoming connections and spawning a new coroutine for
+        // each connection using asio::co_spawn.
+        asio::co_spawn(io_ctx_, listener(), asio::detached);
 
-            // Work Guard: Prevents the io_context from running out of work and
-            // concluding too early. This is critical in a multi-threaded server
-            // to keep the io_context active even if it's temporarily out of
-            // work.
-            auto work_guard = asio::make_work_guard(io_context);
-
-            // Launch the listener coroutine. This function is responsible for
-            // accepting incoming connections and spawning a new coroutine for
-            // each connection using asio::co_spawn.
-            asio::co_spawn(io_context, listener(io_context), asio::detached);
-
-            // Create a vector to hold the worker threads that will run the
-            // io_context.
-            std::vector<std::thread> threads;
-
-            // Initialize threads to run the io_context. The number of threads
-            // can be determined based on the hardware concurrency level
-            // (std::thread::hardware_concurrency) or set statically to avoid
-            // excessive threads, as this can lead to diminishing returns and
-            // increased resource consumption.
-            // Utilizing multi-core processors for concurrent execution of I/O
-            // operations.
-            for (int i = 0; i < N_THREADS; i++) {
-                threads.emplace_back([&io_context]() {
-                    // Each thread runs the io_context. The run() function will
-                    // block until all work has finished, including asynchronous
-                    // tasks initiated by active connections and handlers.
-                    //
-                    // Note:
-                    // - The io_context is NOT thread-safe for arbitrary use.
-                    // Luckily, it is safe to call `run()`, `run_one()`,
-                    // `poll()`, `poll_one()` member functions concurrently to
-                    // process asynchronous events.
-                    // - ensure that other interactions with io_context, such as
-                    // posting work to it, respect its non-thread-safe
-                    // characteristics. This is typically achieved by using
-                    // `strand` objects to serialize access to the io_context.
-                    io_context.run();
-                });
-            }
-
-            // Join all threads to the main thread. This ensures that the main
-            // function will wait for all I/O operations to complete before
-            // exiting, thereby keeping the server alive to handle requests.
-            for (auto &t : threads) {
-                t.join();
-            }
-        } catch (std::exception &e) {
-            // Exception handling: Any exceptions thrown within the server will
-            // be caught here and logged to stderr.
-            std::cerr << "Server Exception: " << e.what() << std::endl;
+        for (int i = 0; i < n_thread_; i++) {
+            // Each thread runs the io_context. The run() function will
+            // block until all work has finished, including asynchronous
+            // tasks initiated by active connections and handlers.
+            //
+            // Note:
+            // - The io_context is NOT thread-safe for arbitrary use.
+            // Luckily, it is safe to call `run()`, `run_one()`,
+            // `poll()`, `poll_one()` member functions concurrently to
+            // process asynchronous events.
+            // - ensure that other interactions with io_context, such as
+            // posting work to it, respect its non-thread-safe
+            // characteristics. This is typically achieved by using
+            // `strand` objects to serialize access to the io_context.
+            threads_.emplace_back([this]() { io_ctx_.run(); });
         }
+
+        // Join all threads to the main thread. This ensures that the main
+        // function will wait for all I/O operations to complete before
+        // exiting, thereby keeping the server alive to handle requests.
+        for (auto &t : threads_) {
+            t.join();
+        }
+    } catch (std::exception &e) {
+        // Exception handling: Any exceptions thrown within the server will
+        // be caught here and logged to stderr.
+        std::cerr << "Server Exception: " << e.what() << std::endl;
     }
-} // namespace Server
+}
