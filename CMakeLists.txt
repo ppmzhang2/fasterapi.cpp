@@ -12,9 +12,11 @@ include_directories("${CMAKE_CURRENT_SOURCE_DIR}/lib")
 # define sources and headers
 set(HEADERS
     "${CMAKE_CURRENT_SOURCE_DIR}/include/common.hpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/include/listener.hpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/include/server.hpp"
 )
 set(SOURCES
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/listener.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/src/server.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/src/main.cpp"
 )
