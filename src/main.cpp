@@ -1,6 +1,6 @@
-#include "server.hpp"
+#include "httpsrv.hpp"
 
 int main() {
-    Server::Run(8080, 4);
+    HttpSrv::Run(8080, 4);
     return 0;
 }

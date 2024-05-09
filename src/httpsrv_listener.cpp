@@ -1,5 +1,16 @@
-#include "listener.hpp"
+#include "httpsrv_listener.hpp"
+#include "common.hpp"
+#include "httpreq_message.hpp"
 #include <iostream>
+
+// Convert `asio::streambuf` to `std::string`
+// Note: This function consumes the buffer.
+static inline const std::string streambuf2string(asio::streambuf &buffer) {
+    std::istream is(&buffer);
+    std::string data((std::istreambuf_iterator<char>(is)),
+                     std::istreambuf_iterator<char>());
+    return data;
+}
 
 std::string http_date() {
     auto now =
@@ -12,40 +23,20 @@ std::string http_date() {
 }
 
 std::string prepare_response(bool keep_alive) {
-    return "HTTP/1.1 200 OK\r\n"
-           "Date: " +
-           http_date() +
-           "\r\n"
-           "Content-Type: text/plain\r\n"
-           "Content-Length: 12\r\n" +
-           (keep_alive ? "Connection: keep-alive\r\n"
-                       : "Connection: close\r\n") +
-           "\r\n"
-           "Hello world!";
-}
-
-// Parse the request to check if the client wants to keep the connection alive.
-// for simplicity, we are ignoring the request details.
-bool flag_keep_alive(asio::streambuf &request) {
-    std::istream request_stream(&request);
-    std::string request_line;
-    while (std::getline(request_stream, request_line) &&
-           !request_line.empty() && request_line != "\r") {
-        if (request_line.find("Connection: keep-alive") != std::string::npos) {
-            return true;
-        }
-    }
-    return false;
+    return "HTTP/1.1 200 OK" CRLF "Date: " + http_date() +
+           CRLF "Content-Type: text/plain" CRLF "Content-Length: 12" CRLF +
+           (keep_alive ? "Connection: keep-alive" : "Connection: close") +
+           CRLF2 "Hello world!";
 }
 
 // Constructor: Initialize server parameters and work guard.
-Server::Listener::Listener(const uint16_t port) : port_(port) {}
+HttpSrv::Listener::Listener(const uint16_t port) : port_(port) {}
 
 // Coroutine that continuously listens for incoming TCP connections on a
 // specified port. This function sets up an acceptor, listens on port 8080, and
 // spawns a new coroutine for each client connection using the handle_client
 // coroutine.
-asio::awaitable<void> Server::Listener::Start() {
+asio::awaitable<void> HttpSrv::Listener::Start() {
     // Get the executor associated with the current coroutine.
     auto executor = co_await asio::this_coro::executor;
 
@@ -72,26 +63,45 @@ asio::awaitable<void> Server::Listener::Start() {
 
 // Coroutine to handle an individual client connection, now with Keep-Alive
 // support.
-asio::awaitable<void> Server::Listener::session(asio::ip::tcp::socket socket) {
+asio::awaitable<void> HttpSrv::Listener::session(asio::ip::tcp::socket socket) {
     // Check if the socket is open before proceeding.
     if (!socket.is_open()) {
         std::cerr << "Socket is not open." << std::endl;
         co_return;
     }
 
-    asio::streambuf request;
+    asio::streambuf req_buf;
 
     for (;;)
         try {
             // 1. Asynchronously read until the HTTP header delimiter.
-            std::size_t bytes_transferred = co_await asio::async_read_until(
-                socket, request, "\r\n\r\n", asio::use_awaitable);
+            // NOTE: the function does not stop reading once the delimiter is
+            // found; it reads until the buffer is full or the delimiter is
+            co_await asio::async_read_until(socket, req_buf, CRLF2,
+                                            asio::use_awaitable);
 
-            // 2. Check if the client wants to keep the connection alive.
-            bool keep_alive = flag_keep_alive(request);
+            // 2. Parse the request header and perhaps body.
+            HttpReq::Message req(streambuf2string(req_buf));
+
+            // 3. Read the remaining body if it exists.
+            if (req.unread() > 0) {
+                asio::streambuf reqbody_buf;
+                asio::error_code ec_read_body;
+                co_await asio::async_read(
+                    socket, reqbody_buf, asio::transfer_exactly(req.unread()),
+                    asio::redirect_error(asio::use_awaitable, ec_read_body));
+                if (ec_read_body) {
+                    std::cerr
+                        << "Error reading body: " << ec_read_body.message()
+                        << std::endl;
+                    break;
+                }
+                req.set_body(req.body() + streambuf2string(reqbody_buf));
+            }
+            req.Print();
 
             // 3. Create the response message.
-            std::string response = prepare_response(keep_alive);
+            std::string response = prepare_response(req.keep_alive());
 
             // 4. Asynchronously write the response back to the client.
             asio::error_code ec_write;
@@ -108,13 +118,11 @@ asio::awaitable<void> Server::Listener::session(asio::ip::tcp::socket socket) {
                 break;
             }
 
-            // 5. If the connection is not "keep-alive", close the socket.
-            if (!keep_alive) {
-                break; // Exit the loop to close the socket fully.
+            // 5. Close the connection if not Keep-Alive by exiting loop
+            if (!req.keep_alive()) {
+                break;
             }
 
-            // Clear the buffer for the next request.
-            request.consume(bytes_transferred);
         } catch (std::system_error &e) {
             // EOF is expected when the client closes the connection.
             // TODO: verify

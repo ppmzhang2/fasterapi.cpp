@@ -1,8 +1,8 @@
-#include "server.hpp"
-#include "listener.hpp"
+#include "httpsrv.hpp"
+#include "httpsrv_listener.hpp"
 #include <iostream>
 
-void Server::Run(uint16_t port, uint16_t n_thread) {
+void HttpSrv::Run(uint16_t port, uint16_t n_thread) {
     Listener listener = Listener(port);
 
     asio::io_context ctx;

@@ -3,7 +3,7 @@
 #include <asio.hpp>
 #include <stdint.h>
 
-namespace Server {
+namespace HttpSrv {
 
     class Listener {
       public:
@@ -23,4 +23,4 @@ namespace Server {
         asio::awaitable<void> session(asio::ip::tcp::socket socket);
     };
 
-} // namespace Server
+} // namespace HttpSrv
