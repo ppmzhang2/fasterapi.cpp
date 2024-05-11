@@ -1,6 +1,7 @@
-#include "httpsrv_listener.hpp"
+#include "httprsp_listener.hpp"
 #include "common.hpp"
 #include "httpreq_message.hpp"
+#include "httprsp_message.hpp"
 #include <iostream>
 
 // Convert `asio::streambuf` to `std::string`
@@ -12,31 +13,11 @@ static inline const std::string streambuf2string(asio::streambuf &buffer) {
     return data;
 }
 
-std::string http_date() {
-    auto now =
-        std::chrono::system_clock::to_time_t(std::chrono::system_clock::now());
-    std::stringstream ss;
-    ss << std::ctime(&now);
-    std::string s = ss.str();
-    s.pop_back(); // Remove newline
-    return s;
-}
-
-std::string prepare_response(bool keep_alive) {
-    return "HTTP/1.1 200 OK" CRLF "Date: " + http_date() +
-           CRLF "Content-Type: text/plain" CRLF "Content-Length: 12" CRLF +
-           (keep_alive ? "Connection: keep-alive" : "Connection: close") +
-           CRLF2 "Hello world!";
-}
-
-// Constructor: Initialize server parameters and work guard.
-HttpSrv::Listener::Listener(const uint16_t port) : port_(port) {}
-
 // Coroutine that continuously listens for incoming TCP connections on a
 // specified port. This function sets up an acceptor, listens on port 8080, and
 // spawns a new coroutine for each client connection using the handle_client
 // coroutine.
-asio::awaitable<void> HttpSrv::Listener::Start() {
+asio::awaitable<void> HttpRsp::Listener::Start() {
     // Get the executor associated with the current coroutine.
     auto executor = co_await asio::this_coro::executor;
 
@@ -63,7 +44,7 @@ asio::awaitable<void> HttpSrv::Listener::Start() {
 
 // Coroutine to handle an individual client connection, now with Keep-Alive
 // support.
-asio::awaitable<void> HttpSrv::Listener::session(asio::ip::tcp::socket socket) {
+asio::awaitable<void> HttpRsp::Listener::session(asio::ip::tcp::socket socket) {
     // Check if the socket is open before proceeding.
     if (!socket.is_open()) {
         std::cerr << "Socket is not open." << std::endl;
@@ -100,12 +81,12 @@ asio::awaitable<void> HttpSrv::Listener::session(asio::ip::tcp::socket socket) {
             }
 
             // 3. Create the response message.
-            std::string response = prepare_response(req.keep_alive());
+            HttpRsp::Message rsp = HttpRsp::serv_file(req, root_);
 
             // 4. Asynchronously write the response back to the client.
             asio::error_code ec_write;
             co_await asio::async_write(
-                socket, asio::buffer(response),
+                socket, asio::buffer(rsp.ToStr()),
                 asio::redirect_error(asio::use_awaitable, ec_write));
             if (ec_write) {
                 std::cerr << "Client closed connection: [" << ec_write.message()
@@ -114,7 +95,7 @@ asio::awaitable<void> HttpSrv::Listener::session(asio::ip::tcp::socket socket) {
             }
 
             // 5. Close the connection if not Keep-Alive by exiting loop
-            if (!req.keep_alive()) {
+            if (rsp.conn != HttpHdr::Conn::KEEP_ALIVE) {
                 break;
             }
 
@@ -131,6 +112,8 @@ asio::awaitable<void> HttpSrv::Listener::session(asio::ip::tcp::socket socket) {
         }
 
     // Attempt graceful closure of the connection
+    // TODO:
+    // - [asio.system:107]: Transport endpoint is not connected
     try {
         socket.shutdown(asio::ip::tcp::socket::shutdown_send);
         socket.close();

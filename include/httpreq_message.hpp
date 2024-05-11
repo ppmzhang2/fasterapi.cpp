@@ -1,7 +1,7 @@
 #pragma once
 
 #include "common.hpp"
-#include "httpreq_enums.hpp"
+#include "httphdr.hpp"
 #include <map>
 #include <stdint.h>
 #include <string>
@@ -21,9 +21,9 @@ namespace HttpReq {
       public:
         std::unordered_map<std::string, std::string> kv;
         size_t length;
-        Method method;
-        Protocol protocol;
-        Conn conn;
+        HttpHdr::Method method;
+        HttpHdr::Version version;
+        HttpHdr::Conn conn;
 
         // Constructor
         Message()
@@ -31,8 +31,9 @@ namespace HttpReq {
                   std::pair<std::string, std::string>{kK_PATH, ""},
                   std::pair<std::string, std::string>{kK_BODY, ""},
               }),
-              length(0), method(Method::UNKNOWN), protocol(Protocol::UNKNOWN),
-              conn(Conn::UNKNOWN) {}
+              length(0), method(HttpHdr::Method::UNKNOWN),
+              version(HttpHdr::Version::UNKNOWN), conn(HttpHdr::Conn::UNKNOWN) {
+        }
 
         // Constructor with a string input
         Message(const std::string &);
@@ -71,7 +72,7 @@ namespace HttpReq {
             return length > 0 ? length - body().size() : 0;
         }
 
-        bool keep_alive() const { return conn == Conn::KEEP_ALIVE; }
+        bool keep_alive() const { return conn == HttpHdr::Conn::KEEP_ALIVE; }
 
         void Print() const;
 
@@ -89,8 +90,8 @@ namespace HttpReq {
         std::size_t pos_dlm_1 = req_str.find(' ');
         std::size_t pos_dlm_2 = req_str.find(' ', pos_dlm_1 + 1);
         if (pos_dlm_1 != std::string::npos && pos_dlm_2 != std::string::npos) {
-            method = str2method(req_str.substr(0, pos_dlm_1));
-            protocol = str2proto(req_str.substr(pos_dlm_2 + 1, pos_end));
+            method = HttpHdr::str2method(req_str.substr(0, pos_dlm_1));
+            version = HttpHdr::str2ver(req_str.substr(pos_dlm_2 + 1, pos_end));
             set_path(req_str.substr(pos_dlm_1 + 1, pos_dlm_2 - pos_dlm_1 - 1));
         }
     }
@@ -145,7 +146,7 @@ namespace HttpReq {
         }
         try {
             const std::string conn_str = get(kK_CONN);
-            conn = str2conn(conn_str);
+            conn = HttpHdr::str2conn(conn_str);
             kv.erase(kK_CONN);
         } catch (const std::out_of_range &e) {
             // ignore
