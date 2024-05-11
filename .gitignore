@@ -1,0 +1,20 @@
+# general things to ignore
+.DS_Store
+build/
+.cache/
+*.so
+*~
+
+# CMake
+CMakeFiles/
+CMakeCache.txt
+cmake_install.cmake
+Makefile
+include/config.h
+
+# IDE
+.vscode/
+
+# C/C++
+*.out
+profiler_output.prof
