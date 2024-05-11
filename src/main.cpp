@@ -1,6 +1,7 @@
-#include "httpsrv.hpp"
+#include "httprsp_run.hpp"
 
-int main() {
-    HttpSrv::Run(8080, 4);
+int main(int argc, char *argv[]) {
+    const std::string root = (argc > 1) ? argv[1] : ".";
+    HttpRsp::Run(8080, 4, root);
     return 0;
 }

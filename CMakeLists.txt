@@ -13,17 +13,18 @@ add_definitions(-DASIO_NO_DEPRECATED)
 # define sources and headers
 set(HEADERS
     "${CMAKE_CURRENT_SOURCE_DIR}/include/common.hpp"
-    "${CMAKE_CURRENT_SOURCE_DIR}/include/httpreq_enums.hpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/include/httphdr.hpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/include/httpreq_message.hpp"
-    "${CMAKE_CURRENT_SOURCE_DIR}/include/httpsrv_listener.hpp"
-    "${CMAKE_CURRENT_SOURCE_DIR}/include/httpsrv.hpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/include/httprsp_listener.hpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/include/httprsp_message.hpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/include/httprsp_run.hpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/include/utils.hpp"
 )
 set(SOURCES
     "${CMAKE_CURRENT_SOURCE_DIR}/src/main.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/src/common.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/src/httpreq_message.cpp"
-    "${CMAKE_CURRENT_SOURCE_DIR}/src/httpsrv_listener.cpp"
-    "${CMAKE_CURRENT_SOURCE_DIR}/src/httpsrv.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/httprsp_listener.cpp"
 )
 
 # Create the executable

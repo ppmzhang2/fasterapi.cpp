@@ -1,5 +1,6 @@
 #include "httpreq_message.hpp"
 #include "common.hpp"
+#include "httphdr.hpp"
 #include <iostream>
 #include <stdexcept>
 
@@ -10,7 +11,8 @@ HttpReq::Message::Message(const std::string &req_str)
           std::pair<std::string, std::string>{kK_PATH, ""},
           std::pair<std::string, std::string>{kK_BODY, ""},
       }),
-      length(0), method(Method::UNKNOWN), protocol(Protocol::UNKNOWN) {
+      length(0), method(HttpHdr::Method::UNKNOWN),
+      version(HttpHdr::Version::UNKNOWN) {
 
     // Split header and body; raise error if no trailing two CRLFs
     size_t pos_body = req_str.find(CRLF2); // position of start of body
@@ -29,7 +31,7 @@ HttpReq::Message::Message(const std::string &req_str)
         set_body(req_str.substr(pos_body + 4));
     }
 
-    // Parse the method, path, and protocol
+    // Parse the method, path, and version
     pos_kv = reqhdr_str.find(CRLF); // position of end of KV pairs
     if (pos_kv != std::string::npos) {
         update_reqline(reqhdr_str.substr(0, pos_kv), pos_kv);
@@ -41,9 +43,9 @@ HttpReq::Message::Message(const std::string &req_str)
 }
 
 void HttpReq::Message::Print() const {
-    std::cout << "Method: " << HttpReq::method2str(method) << std::endl;
-    std::cout << "Protocol: " << HttpReq::proto2str(protocol) << std::endl;
-    std::cout << "Connection: " << HttpReq::conn2str(conn) << std::endl;
+    std::cout << "Method: " << HttpHdr::method2str(method) << std::endl;
+    std::cout << "Protocol: " << HttpHdr::ver2str(version) << std::endl;
+    std::cout << "Connection: " << HttpHdr::conn2str(conn) << std::endl;
     std::cout << "Content Length: " << length << std::endl;
     std::cout << "Headers: " << std::endl;
     for (const auto &header : kv) {
