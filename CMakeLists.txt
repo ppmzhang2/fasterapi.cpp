@@ -23,7 +23,6 @@ set(HEADERS
 set(SOURCES
     "${CMAKE_CURRENT_SOURCE_DIR}/src/main.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/src/common.cpp"
-    "${CMAKE_CURRENT_SOURCE_DIR}/src/httpreq_message.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/src/httprsp_listener.cpp"
 )
 

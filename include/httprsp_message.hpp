@@ -4,7 +4,6 @@
 #include "httpreq_message.hpp"
 #include "utils.hpp"
 #include <asio.hpp>
-#include <stdint.h>
 
 namespace HttpRsp {
 
@@ -29,34 +28,33 @@ namespace HttpRsp {
                    CRLF "Content-Length: " + std::to_string(body.size()) +
                    CRLF "Connection: " + conn2str(conn) + CRLF2 + body;
         }
-    };
 
-    // Serve the file at the given path.
-    static inline const Message serv_file(const HttpReq::Message &req,
-                                          const std::string &root) {
-        Message rsp;
+        // Serve the file at the given path.
+        // Favor updating the existing response message over creating a new
+        // one.
+        inline void ServFile(const HttpReq::Message &req,
+                             const std::string &root) {
 
-        rsp.conn = req.conn == HttpHdr::Conn::KEEP_ALIVE
+            conn = req.conn == HttpHdr::Conn::KEEP_ALIVE
                        ? HttpHdr::Conn::KEEP_ALIVE
                        : HttpHdr::Conn::CLOSE;
 
-        if (req.method != HttpHdr::Method::GET) {
-            rsp.code = HttpHdr::Status::BadRequest;
-            rsp.body = "You are in the wrong place!";
-            return rsp;
-        }
+            if (req.method != HttpHdr::Method::GET) {
+                code = HttpHdr::Status::BadRequest;
+                body = "You are in the wrong place!";
+            }
 
-        std::string cont = Utils::read_file(req.path(), root);
-        if (cont.empty()) {
-            rsp.code = HttpHdr::Status::NotFound;
-            rsp.body = "404 Not Found";
-            rsp.cont_type = HttpHdr::ContType::TEXT_PLAIN;
-        } else {
-            rsp.code = HttpHdr::Status::OK;
-            rsp.body = cont;
-            rsp.cont_type = HttpHdr::ContType::TEXT_HTML;
+            const std::string cont = Utils::read_file(req.path(), root);
+            if (cont.empty()) {
+                code = HttpHdr::Status::NotFound;
+                body = "404 Not Found";
+                cont_type = HttpHdr::ContType::TEXT_PLAIN;
+            } else {
+                code = HttpHdr::Status::OK;
+                body = cont;
+                cont_type = HttpHdr::ContType::TEXT_HTML;
+            }
         }
+    };
 
-        return rsp;
-    }
 } // namespace HttpRsp

@@ -2,8 +2,6 @@
 
 #include "common.hpp"
 #include "httphdr.hpp"
-#include <map>
-#include <stdint.h>
 #include <string>
 #include <unordered_map>
 
@@ -26,17 +24,15 @@ namespace HttpReq {
         HttpHdr::Conn conn;
 
         // Constructor
+        // TODO: remove initialization of `conn` can increase the IO capacity of
+        //       the server. It is not safe and we don't know why.
         Message()
             : kv({
                   std::pair<std::string, std::string>{kK_PATH, ""},
                   std::pair<std::string, std::string>{kK_BODY, ""},
               }),
               length(0), method(HttpHdr::Method::UNKNOWN),
-              version(HttpHdr::Version::UNKNOWN), conn(HttpHdr::Conn::UNKNOWN) {
-        }
-
-        // Constructor with a string input
-        Message(const std::string &);
+              version(HttpHdr::Version::UNKNOWN) {}
 
         // Get a value by a specified key (read-only)
         const std::string &get(const std::string &key) const {
@@ -65,9 +61,8 @@ namespace HttpReq {
         void set_body(const std::string &new_body) { kv["BODY"] = new_body; }
 
         // Other attributes
-        // Get the length of unread data (body)
-        // NOTE: based on stress test from wrk, must check if length is zero
-        // before calculating unread
+        // Get the length of unread data (body).
+        // Check first if length > 0 before calculating the unread.
         size_t unread() const {
             return length > 0 ? length - body().size() : 0;
         }
@@ -75,6 +70,10 @@ namespace HttpReq {
         bool keep_alive() const { return conn == HttpHdr::Conn::KEEP_ALIVE; }
 
         void Print() const;
+
+        inline void Update(const std::string &req_str);
+
+        inline const std::string ToStr() const;
 
       private:
         inline void update_reqline(const std::string &, const size_t &);
@@ -151,6 +150,48 @@ namespace HttpReq {
         } catch (const std::out_of_range &e) {
             // ignore
         }
+    }
+
+    // Parse the request string and update the message
+    // NOTE:
+    // - will NOT set default values if not found
+    // - Favor updating the existing request message instead of creating a new
+    //   one
+    inline void Message::Update(const std::string &req_str) {
+        // Split header and body; raise error if no trailing two CRLFs
+        size_t pos_body = req_str.find(CRLF2); // position of start of body
+        if (pos_body == std::string::npos) {
+            throw std::invalid_argument("Invalid request string");
+            exit(1);
+        }
+
+        size_t pos_kv;
+        // TODO: the current parser `parse_line_req` requires the input ends
+        // with CRLF. Make it more robust.
+        std::string reqhdr_str = req_str.substr(0, pos_body + 2);
+        TOUPPER_ASCII(reqhdr_str.data());
+        // set body if exists
+        if (pos_body + 4 < req_str.size()) {
+            set_body(req_str.substr(pos_body + 4));
+        }
+
+        // Parse the method, path, and version
+        pos_kv = reqhdr_str.find(CRLF); // position of end of KV pairs
+        if (pos_kv != std::string::npos) {
+            update_reqline(reqhdr_str.substr(0, pos_kv), pos_kv);
+        }
+
+        // Parse the headers
+        std::size_t pos_beg = pos_kv + 2;
+        update_kv(reqhdr_str, pos_beg);
+    }
+
+    // Convert the message to a string
+    inline const std::string Message::ToStr() const {
+        return "Method: " + HttpHdr::method2str(method) +
+               "; Protocol: " + HttpHdr::ver2str(version) +
+               "; Connection: " + HttpHdr::conn2str(conn) +
+               "; Length: " + std::to_string(length) + "; Body:\n" + body();
     }
 
 } // namespace HttpReq
