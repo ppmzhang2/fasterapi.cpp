@@ -10,6 +10,7 @@
 #include <arm_neon.h>
 void toupper_ascii_neon(char *str);
 #define TOUPPER_ASCII(str) toupper_ascii_neon(str)
+// TODO: the AVX2 detection is not working
 #elif defined(__AVX2__)
 #include <immintrin.h>
 void toupper_ascii_avx2(char *str);

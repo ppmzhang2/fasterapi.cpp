@@ -1,6 +1,5 @@
 #pragma once
 
-#include "common.hpp"
 #include <array>
 #include <string>
 
@@ -49,9 +48,8 @@ namespace HttpHdr {
     };
 
     enum class Conn : uint8_t {
-        UNKNOWN = 0,
+        CLOSE = 0,
         KEEP_ALIVE,
-        CLOSE,
     };
 
     namespace {
@@ -126,7 +124,7 @@ namespace HttpHdr {
                 return static_cast<Conn>(i);
             }
         }
-        return Conn::UNKNOWN;
+        return Conn::CLOSE;
     }
 
     static inline const std::string conttype2str(ContType cont_type) {

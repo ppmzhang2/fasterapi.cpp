@@ -19,10 +19,10 @@ static inline const std::string streambuf2string(asio::streambuf &buffer) {
 // coroutine.
 asio::awaitable<void> HttpRsp::Listener::Start() {
     // Get the executor associated with the current coroutine.
-    auto executor = co_await asio::this_coro::executor;
+    auto exor = co_await asio::this_coro::executor;
 
     // Set up the TCP acceptor to listen on port 8080 using IPv4.
-    asio::ip::tcp::acceptor acceptor(executor, {asio::ip::tcp::v4(), port_});
+    asio::ip::tcp::acceptor acceptor(exor, {asio::ip::tcp::v4(), port_});
     std::cout << "Server listening on port " << port_ << std::endl;
 
     for (;;)
@@ -33,25 +33,23 @@ asio::awaitable<void> HttpRsp::Listener::Start() {
 
             // Spawn a new coroutine to handle the client using a strand for
             // safe concurrent access.
-            asio::co_spawn(executor, session(std::move(socket)),
-                           asio::detached);
+            asio::co_spawn(exor, session(std::move(socket)), asio::detached);
         }
         // Handle exceptions thrown by the acceptor.
+        // TODO: [asio.system:24] Too many open files
         catch (std::system_error &e) {
-            std::cerr << "Acceptor Exception: " << e.what() << std::endl;
+            std::cerr << "Acceptor Exception: "
+                      << "[" << e.code() << "] meaning [" << e.what() << "]"
+                      << std::endl;
         }
 }
 
 // Coroutine to handle an individual client connection, now with Keep-Alive
 // support.
 asio::awaitable<void> HttpRsp::Listener::session(asio::ip::tcp::socket socket) {
-    // Check if the socket is open before proceeding.
-    if (!socket.is_open()) {
-        std::cerr << "Socket is not open." << std::endl;
-        co_return;
-    }
-
     asio::streambuf req_buf;
+    HttpReq::Message req;
+    HttpRsp::Message rsp;
 
     for (;;)
         try {
@@ -62,7 +60,7 @@ asio::awaitable<void> HttpRsp::Listener::session(asio::ip::tcp::socket socket) {
                                             asio::use_awaitable);
 
             // 2. Parse the request header and perhaps body.
-            HttpReq::Message req(streambuf2string(req_buf));
+            req.Update(streambuf2string(req_buf));
 
             // 3. Read the remaining body if it exists.
             if (req.unread() > 0) {
@@ -80,8 +78,8 @@ asio::awaitable<void> HttpRsp::Listener::session(asio::ip::tcp::socket socket) {
                 req.set_body(req.body() + streambuf2string(reqbody_buf));
             }
 
-            // 3. Create the response message.
-            HttpRsp::Message rsp = HttpRsp::serv_file(req, root_);
+            // 4. Update response message.
+            rsp.ServFile(req, root_);
 
             // 4. Asynchronously write the response back to the client.
             asio::error_code ec_write;

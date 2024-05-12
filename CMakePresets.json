@@ -5,6 +5,7 @@
         "minor": 27,
         "patch": 0
     },
+    // TODO: consider adding `-mavx2` for AVX2 support
     "configurePresets": [
         {
             "name": "ux-debug",

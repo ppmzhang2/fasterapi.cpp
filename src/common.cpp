@@ -34,6 +34,7 @@ void toupper_ascii_neon(char *str) {
     }
 }
 
+// TODO: the AVX2 detection is not working
 #elif defined(__AVX2__)
 void toupper_ascii_avx2(char *str) {
     int length = std::strlen(str);
